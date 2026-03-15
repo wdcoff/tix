@@ -1,0 +1,41 @@
+# tix configuration
+# Copy this file to ~/.config/tix/config.toml and edit as needed.
+# The Zendesk API token must be set via the ZENDESK_API_TOKEN env var.
+
+[zendesk]
+# Your Zendesk subdomain (e.g. "mycompany" for mycompany.zendesk.com)
+subdomain = "mycompany"
+# The email address associated with your Zendesk account
+email = "you@example.com"
+
+[git]
+# Path to your local repo checkout
+repo_path = "~/src/myproject"
+# Directory where git worktrees will be created (default: <repo_path>/.worktrees)
+# worktree_dir = "~/src/myproject/.worktrees"
+# Base branch for new worktrees (default: "main")
+# base_branch = "main"
+
+[app]
+# How often to poll Zendesk for updates, in seconds (default: 300)
+# sync_interval_seconds = 300
+# Terminal emulator to launch for Claude sessions (default: auto-detect)
+# terminal = "iTerm"
+# Command used to launch Claude in a worktree (default shown below)
+# claude_launch_command = "claude --dangerously-skip-permissions --remote-control"
+
+[board]
+# Kanban column names, in display order
+# columns = ["Triage", "Investigating", "Waiting", "In Review", "Done"]
+# Hours before a card is considered stale (default: 24)
+# warn_after_hours = 24
+# Per-column staleness overrides
+# [[board.staleness_rules]]
+# column = "Investigating"
+# warn_after_hours = 24
+# [[board.staleness_rules]]
+# column = "Waiting"
+# warn_after_hours = 48
+# [[board.staleness_rules]]
+# column = "In Review"
+# warn_after_hours = 12
