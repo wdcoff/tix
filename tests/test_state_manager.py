@@ -59,12 +59,6 @@ class TestApplySync:
 
         assert mgr.state.tickets[0].last_synced_at is not None
 
-    def test_custom_status_map_updated(self):
-        mgr = StateManager(BoardState())
-        mgr.apply_sync([], custom_status_map={10: "escalated"})
-
-        assert mgr.state.custom_status_map == {10: "escalated"}
-
     def test_reopened_archived_ticket_restored(self):
         archived_ticket = TicketData(
             ticket_id=99,

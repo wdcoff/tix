@@ -1,8 +1,11 @@
+import logging
 import re
 
 import httpx
 
 from tix.errors import ZendeskAPIError
+
+logger = logging.getLogger(__name__)
 
 
 class ZendeskService:
@@ -33,13 +36,17 @@ class ZendeskService:
                 params={"query": "type:ticket status:open", "per_page": 100},
             )
             resp.raise_for_status()
-            return resp.json()["results"]
+            results = resp.json()["results"]
+            logger.info("Fetched %d open tickets from Zendesk", len(results))
+            return results
         except httpx.HTTPStatusError as e:
+            logger.warning("Zendesk API error %d: %s", e.response.status_code, e.response.text[:200])
             raise ZendeskAPIError(
                 f"Zendesk API error {e.response.status_code}: "
                 f"{e.response.text[:200]}"
             ) from e
         except httpx.RequestError as e:
+            logger.warning("Zendesk unreachable: %s", e)
             raise ZendeskAPIError(f"Zendesk unreachable: {e}") from e
 
     # -- custom statuses -------------------------------------------------------
@@ -56,7 +63,7 @@ class ZendeskService:
                 if s.get("active", True)
             }
         except httpx.HTTPStatusError as e:
-            # Custom statuses may not be enabled — return empty map.
+            # Custom statuses may not be enabled -- return empty map.
             if e.response.status_code == 404:
                 return {}
             raise ZendeskAPIError(

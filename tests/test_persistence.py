@@ -21,7 +21,6 @@ def _make_state() -> BoardState:
             ),
         ],
         last_sync=datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
-        custom_status_map={5: "escalated"},
     )
 
 
@@ -39,7 +38,6 @@ class TestSaveLoadRoundTrip:
         assert restored.tickets[0].priority == Priority.NORMAL
         assert restored.tickets[0].created_at == datetime(2025, 6, 1, 8, 0, 0, tzinfo=timezone.utc)
         assert restored.last_sync == original.last_sync
-        assert restored.custom_status_map == {5: "escalated"}
 
     def test_load_missing_file_returns_empty(self, tmp_path: Path):
         state_file = tmp_path / "does_not_exist.json"

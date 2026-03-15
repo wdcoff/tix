@@ -7,18 +7,22 @@ Textual ``@work(thread=True)`` worker.
 """
 from __future__ import annotations
 
+import logging
+
 from tix.config import Config
 from tix.models import PRStatus
 from tix.services.deploy_tracker import DeployTracker
 from tix.services.pr_tracker import check_all_prs
 from tix.state_manager import StateManager
 
-# Type alias to keep import lightweight — ZendeskService is only
+# Type alias to keep import lightweight -- ZendeskService is only
 # constructed inside TixApp when config is present.
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tix.services.zendesk import ZendeskService
+
+logger = logging.getLogger(__name__)
 
 
 class SyncCoordinator:
@@ -45,6 +49,7 @@ class SyncCoordinator:
 
         Returns ``(ticket_count, error_message_or_none)``.
         """
+        logger.info("Sync started")
         try:
             # 1. Fetch tickets from Zendesk
             tickets = self._zendesk.fetch_open_tickets()
@@ -106,14 +111,18 @@ class SyncCoordinator:
                                     self._manager.mark_deployed(ticket.ticket_id, tag)
             except Exception as exc:
                 pr_error = f"PR/deploy check failed: {exc}"
+                logger.warning("PR/deploy check failed: %s", exc)
 
             # 8. Save state
             self._manager.save()
 
-            return len(self._manager.state.tickets), pr_error
+            ticket_count = len(self._manager.state.tickets)
+            logger.info("Sync complete: %d tickets", ticket_count)
+            return ticket_count, pr_error
 
         except Exception as exc:
             error_msg = f"Sync failed: {exc}"
             if self._manager.state.tickets:
                 error_msg += " (showing cached data)"
+            logger.warning("Sync failed: %s", exc)
             return len(self._manager.state.tickets), error_msg

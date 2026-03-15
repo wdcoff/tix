@@ -88,7 +88,7 @@ class StateManager:
                 ticket.updated_at = updated_dt
                 ticket.last_synced_at = now
             elif tid in archived:
-                # Ticket was previously archived — check if it has reopened.
+                # Ticket was previously archived -- check if it has reopened.
                 if status not in ("solved", "closed"):
                     arch_ticket = archived[tid]
                     arch_ticket.subject = subject
@@ -166,6 +166,11 @@ class StateManager:
             else:
                 still_active.append(ticket)
         self.state.tickets = still_active
+
+        # Cap archived list to keep only the most recent entries
+        MAX_ARCHIVED = 200
+        if len(self.state.archived) > MAX_ARCHIVED:
+            self.state.archived = self.state.archived[-MAX_ARCHIVED:]
 
     # ------------------------------------------------------------------
     # PR / deploy / staleness

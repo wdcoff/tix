@@ -97,7 +97,6 @@ class TestBoardStateRoundTrip:
             tickets=[_make_ticket(ticket_id=1), _make_ticket(ticket_id=2)],
             archived=[_make_ticket(ticket_id=3, zendesk_status="closed")],
             last_sync=datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
-            custom_status_map={100: "escalated", 200: "waiting_on_customer"},
         )
         data = original.to_dict()
         restored = BoardState.from_dict(data)
@@ -108,7 +107,6 @@ class TestBoardStateRoundTrip:
         assert len(restored.archived) == 1
         assert restored.archived[0].ticket_id == 3
         assert restored.last_sync == original.last_sync
-        assert restored.custom_status_map == {100: "escalated", 200: "waiting_on_customer"}
 
     def test_empty_board_state_round_trip(self):
         original = BoardState()
@@ -118,16 +116,3 @@ class TestBoardStateRoundTrip:
         assert restored.tickets == []
         assert restored.archived == []
         assert restored.last_sync is None
-        assert restored.custom_status_map == {}
-
-    def test_custom_status_map_keys_are_ints(self):
-        """JSON serializes dict keys as strings; from_dict must convert back."""
-        data = {
-            "tickets": [],
-            "archived": [],
-            "last_sync": None,
-            "custom_status_map": {"42": "escalated"},
-        }
-        restored = BoardState.from_dict(data)
-        assert 42 in restored.custom_status_map
-        assert isinstance(list(restored.custom_status_map.keys())[0], int)

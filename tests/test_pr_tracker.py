@@ -6,7 +6,7 @@ import subprocess
 from unittest import mock
 
 from tix.models import PRContext, PRStatus
-from tix.services.pr_tracker import check_all_prs, is_gh_available
+from tix.services.pr_tracker import check_all_prs
 
 
 def _make_completed_process(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
@@ -118,17 +118,3 @@ class TestCheckAllPrs:
         result = check_all_prs(["ticket-100"])
 
         assert result == {}
-
-
-class TestIsGhAvailable:
-    """Tests for is_gh_available()."""
-
-    @mock.patch("tix.services.pr_tracker.subprocess.run")
-    def test_returns_true_when_authed(self, mock_run: mock.Mock) -> None:
-        mock_run.return_value = _make_completed_process(returncode=0)
-        assert is_gh_available() is True
-
-    @mock.patch("tix.services.pr_tracker.subprocess.run")
-    def test_returns_false_when_not_authed(self, mock_run: mock.Mock) -> None:
-        mock_run.return_value = _make_completed_process(returncode=1)
-        assert is_gh_available() is False

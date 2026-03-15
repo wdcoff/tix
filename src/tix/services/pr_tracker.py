@@ -7,10 +7,13 @@ module degrades gracefully by returning empty results.
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 
 from tix.models import PRContext, PRStatus
 from tix.subprocess_utils import clean_env
+
+logger = logging.getLogger(__name__)
 
 
 def check_all_prs(branch_names: list[str]) -> dict[str, PRContext]:
@@ -32,6 +35,7 @@ def check_all_prs(branch_names: list[str]) -> dict[str, PRContext]:
         env=clean_env(),
     )
     if result.returncode != 0:
+        logger.warning("gh CLI not available or not authenticated; PR check skipped")
         return {}  # gh not installed or not authed -- degrade gracefully
 
     try:
@@ -67,6 +71,7 @@ def check_all_prs(branch_names: list[str]) -> dict[str, PRContext]:
                 merge_sha=merge_sha,
             )
 
+    logger.info("PR check complete: %d PRs matched out of %d branches", len(result_map), len(branch_names))
     return result_map
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 
@@ -23,6 +24,18 @@ from tix.services.worktree import create_worktree, worktree_exists
 from tix.state_manager import StateManager
 from tix.sync import SyncCoordinator
 from tix.widgets.card import TicketCardWidget
+
+LOG_PATH = Path("~/.config/tix/tix.log").expanduser()
+
+
+def _setup_logging() -> None:
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        filename=str(LOG_PATH),
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
 
 class TixApp(App):
@@ -165,7 +178,7 @@ class TixApp(App):
         self, event: TicketCardWidget.CardSelected
     ) -> None:
         if self.config is None:
-            self.notify("No config — cannot open ticket", severity="warning")
+            self.notify("No config -- cannot open ticket", severity="warning")
             return
         self._open_ticket(event.ticket_id)
 
@@ -263,6 +276,7 @@ class TixApp(App):
 
 def main() -> None:
     """Entry point for the tix command."""
+    _setup_logging()
     config: Config | None = None
     try:
         config = load_config()

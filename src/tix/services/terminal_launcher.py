@@ -6,13 +6,17 @@ strip sensitive environment variables from the child environment.
 """
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import textwrap
+import threading
 from pathlib import Path
 
 from tix.errors import ExternalToolError
 from tix.subprocess_utils import clean_env
+
+logger = logging.getLogger(__name__)
 
 
 def _escape_applescript(s: str) -> str:
@@ -75,12 +79,25 @@ def launch_terminal(
     }
 
     launcher = launchers.get(terminal, _launch_default)
-    launcher(cwd, command, ticket_id)
+    try:
+        launcher(cwd, command, ticket_id)
+        logger.info("Launched terminal %s for ticket #%d", terminal, ticket_id)
+    except ExternalToolError:
+        logger.warning("Failed to launch terminal %s for ticket #%d", terminal, ticket_id)
+        raise
 
 
 # ------------------------------------------------------------------
 # Per-terminal launchers
 # ------------------------------------------------------------------
+
+
+def _cleanup_file(path: Path) -> None:
+    """Remove a temporary file, ignoring errors."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _launch_warp(cwd: Path, command: str, ticket_id: int) -> None:
@@ -117,6 +134,9 @@ def _launch_warp(cwd: Path, command: str, ticket_id: int) -> None:
         raise ExternalToolError(
             f"Failed to launch Warp: {result.stderr.strip()}"
         )
+
+    # Schedule cleanup of the temp YAML config file
+    threading.Timer(5.0, _cleanup_file, args=[config_path]).start()
 
 
 def _launch_iterm(cwd: Path, command: str, ticket_id: int) -> None:

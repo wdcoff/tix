@@ -6,6 +6,7 @@ Tag fetching is throttled to avoid hammering the remote.
 """
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 import time
@@ -13,6 +14,8 @@ from pathlib import Path
 
 from tix.errors import GitOperationError
 from tix.subprocess_utils import clean_env
+
+logger = logging.getLogger(__name__)
 
 _SHA_RE = re.compile(r"^[0-9a-f]{7,40}\Z")
 
@@ -41,6 +44,7 @@ class DeployTracker:
                 env=clean_env(),
             )
             self._last_tag_fetch = now
+            logger.info("Fetched tags from remote for %s", repo_path)
 
     def check_deploy(self, repo_path: Path, merge_sha: str) -> str | None:
         """Check if a merge SHA is included in any release tag.
@@ -67,4 +71,6 @@ class DeployTracker:
             return None
 
         # Return the first (newest) tag
-        return result.stdout.strip().split("\n")[0]
+        tag = result.stdout.strip().split("\n")[0]
+        logger.info("Deploy detected for %s in tag %s", merge_sha, tag)
+        return tag

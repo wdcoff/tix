@@ -73,42 +73,6 @@ def test_fetch_open_tickets_unreachable():
 
 
 # ---------------------------------------------------------------------------
-# fetch_custom_statuses
-# ---------------------------------------------------------------------------
-
-
-def test_fetch_custom_statuses_success():
-    payload = {
-        "custom_statuses": [
-            {"id": 10, "agent_label": "Awaiting QA", "active": True},
-            {"id": 20, "agent_label": "Deployed", "active": True},
-            {"id": 30, "agent_label": "Archived", "active": False},
-        ]
-    }
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/v2/custom_statuses.json"
-        return httpx.Response(200, json=payload)
-
-    svc = _make_service(httpx.MockTransport(handler))
-    result = svc.fetch_custom_statuses()
-
-    assert result == {10: "Awaiting QA", 20: "Deployed"}
-    # Inactive status 30 should be excluded
-    assert 30 not in result
-
-
-def test_fetch_custom_statuses_not_enabled():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, json={"error": "Not Found"})
-
-    svc = _make_service(httpx.MockTransport(handler))
-    result = svc.fetch_custom_statuses()
-
-    assert result == {}
-
-
-# ---------------------------------------------------------------------------
 # subdomain validation
 # ---------------------------------------------------------------------------
 

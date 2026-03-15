@@ -5,12 +5,15 @@ variables from the child process environment.
 """
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 from pathlib import Path
 
 from tix.errors import GitOperationError
 from tix.subprocess_utils import clean_env
+
+logger = logging.getLogger(__name__)
 
 
 def create_worktree(
@@ -64,10 +67,12 @@ def create_worktree(
             env=clean_env(),
         )
         if result.returncode != 0:
+            logger.error("Failed to create worktree for branch %s: %s", branch_name, result.stderr.strip())
             raise GitOperationError(
                 f"Failed to create worktree: {result.stderr.strip()}"
             )
 
+    logger.info("Created worktree for branch %s at %s", branch_name, worktree_path)
     return worktree_path
 
 

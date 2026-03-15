@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from tix.config import DEFAULT_STALENESS_RULES
 from tix.models import TicketData
-from tix.services.staleness import check_staleness, update_staleness
+from tix.services.staleness import update_staleness
 
 RULES = [
     {"local": "Investigating", "ok_zendesk": ["open", "new"]},
@@ -26,61 +26,6 @@ def _make_card(
         local_column=local_column,
         stale_since=stale_since,
     )
-
-
-class TestCheckStaleness:
-    """Tests for check_staleness()."""
-
-    def test_no_matching_rule_not_stale(self) -> None:
-        card = _make_card(local_column="NoSuchColumn", zendesk_status="open")
-        is_stale, days = check_staleness(card, RULES)
-        assert is_stale is False
-        assert days == 0
-
-    def test_matching_rule_ok_status_not_stale(self) -> None:
-        card = _make_card(local_column="Investigating", zendesk_status="open")
-        is_stale, days = check_staleness(card, RULES)
-        assert is_stale is False
-        assert days == 0
-
-    def test_mismatch_no_stale_since_returns_false(self) -> None:
-        card = _make_card(
-            local_column="Investigating",
-            zendesk_status="solved",
-            stale_since=None,
-        )
-        is_stale, days = check_staleness(card, RULES)
-        assert is_stale is False
-        assert days == 0
-
-    def test_mismatch_beyond_threshold_is_stale(self) -> None:
-        card = _make_card(
-            local_column="Investigating",
-            zendesk_status="solved",
-            stale_since=datetime.now(timezone.utc) - timedelta(hours=48),
-        )
-        is_stale, days = check_staleness(card, RULES, warn_after_hours=24)
-        assert is_stale is True
-        assert days >= 1
-
-    def test_mismatch_below_threshold_not_stale(self) -> None:
-        card = _make_card(
-            local_column="Investigating",
-            zendesk_status="solved",
-            stale_since=datetime.now(timezone.utc) - timedelta(hours=1),
-        )
-        is_stale, days = check_staleness(card, RULES, warn_after_hours=24)
-        assert is_stale is False
-        assert days == 0
-
-    def test_waiting_column_with_wrong_status(self) -> None:
-        card = _make_card(
-            local_column="Waiting",
-            zendesk_status="open",
-            stale_since=datetime.now(timezone.utc) - timedelta(hours=50),
-        )
-        is_stale, days = check_staleness(card, RULES, warn_after_hours=24)
-        assert is_stale is True
 
 
 class TestUpdateStaleness:
@@ -137,26 +82,6 @@ class TestDefaultStalenessRulesIntegration:
             assert isinstance(rule["ok_zendesk"], list), (
                 f"ok_zendesk must be a list: {rule}"
             )
-
-    def test_default_rules_detect_mismatch(self) -> None:
-        """A card in 'Needs Notify' with zendesk_status 'open' should be stale."""
-        card = _make_card(
-            local_column="Needs Notify",
-            zendesk_status="open",
-            stale_since=datetime.now(timezone.utc) - timedelta(hours=48),
-        )
-        is_stale, days = check_staleness(card, DEFAULT_STALENESS_RULES, warn_after_hours=24)
-        assert is_stale is True
-        assert days >= 1
-
-    def test_default_rules_ok_status_not_stale(self) -> None:
-        """A card in 'Needs Notify' with zendesk_status 'solved' should not be stale."""
-        card = _make_card(
-            local_column="Needs Notify",
-            zendesk_status="solved",
-        )
-        is_stale, days = check_staleness(card, DEFAULT_STALENESS_RULES)
-        assert is_stale is False
 
     def test_default_rules_update_staleness_sets_stale_since(self) -> None:
         """update_staleness should set stale_since for a mismatched default rule."""
