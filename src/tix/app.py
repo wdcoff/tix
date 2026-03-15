@@ -7,9 +7,12 @@ from textual import work
 
 from tix.config import Config, ConfigError, create_default_config, load_config
 from tix.errors import GitOperationError, ExternalToolError, TixError
-from tix.models import BoardState, GitContext
+from tix.models import BoardState, GitContext, PRStatus
 from tix.persistence import load_state
 from tix.screens.board import BoardScreen
+from tix.services.deploy_tracker import check_deploy, maybe_fetch_tags
+from tix.services.pr_tracker import check_all_prs, is_gh_available
+from tix.services.staleness import update_staleness
 from tix.services.terminal_launcher import launch_terminal
 from tix.services.worktree import create_worktree, worktree_exists
 from tix.state_manager import StateManager
@@ -92,6 +95,44 @@ class TixApp(App):
 
             self.manager.apply_sync(tickets, custom_statuses)
             self.manager.archive_closed_tickets()
+
+            # --- Staleness update ---
+            staleness_rules = (
+                self.config.staleness_rules if self.config else []
+            )
+            for ticket in self.manager.state.tickets:
+                update_staleness(ticket, staleness_rules)
+
+            # --- PR detection ---
+            branch_names = [
+                ticket.git.branch_name
+                for ticket in self.manager.state.tickets
+                if ticket.git.branch_name
+            ]
+            if branch_names:
+                pr_map = check_all_prs(branch_names)
+                for ticket in self.manager.state.tickets:
+                    bn = ticket.git.branch_name
+                    if bn and bn in pr_map:
+                        ticket.pr = pr_map[bn]
+
+                # --- Deploy detection for merged PRs ---
+                merged_tickets = [
+                    t for t in self.manager.state.tickets
+                    if t.pr.status == PRStatus.MERGED
+                    and t.pr.merge_sha
+                    and not t.deployed_in_tag
+                ]
+                if merged_tickets and self.config:
+                    maybe_fetch_tags(self.config.repo_path)
+                    for ticket in merged_tickets:
+                        assert ticket.pr.merge_sha is not None
+                        tag = check_deploy(
+                            self.config.repo_path, ticket.pr.merge_sha
+                        )
+                        if tag:
+                            ticket.deployed_in_tag = tag
+
             self.manager.save()
 
             count = len(self.manager.state.tickets)
