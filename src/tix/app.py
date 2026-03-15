@@ -280,15 +280,14 @@ def main() -> None:
     config: Config | None = None
     try:
         config = load_config()
-    except ConfigError:
-        # Create example config so user has a template
-        created = create_default_config()
-        # Also create the actual config.toml if it doesn't exist
+    except ConfigError as e:
         if not DEFAULT_CONFIG_PATH.exists():
-            example = created
-            if example.exists():
-                DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-                DEFAULT_CONFIG_PATH.write_text(example.read_text())
+            # No config file at all — create a starter template
+            create_default_config(target=DEFAULT_CONFIG_PATH)
+            print(f"Created config at {DEFAULT_CONFIG_PATH} — edit it and relaunch.")
+        else:
+            # Config exists but failed to load (e.g. missing env var)
+            print(f"Config error: {e}")
 
     try:
         app = TixApp(config)
