@@ -54,10 +54,7 @@ class TicketCardWidget(Static):
 
     def _apply_stale_class(self) -> None:
         if self.ticket.stale_since is not None:
-            now = datetime.now(timezone.utc)
-            hours = (now - self.ticket.stale_since).total_seconds() / 3600
-            if hours > 24:
-                self.add_class("stale")
+            self.add_class("stale")
 
     def render(self) -> str:
         t = self.ticket

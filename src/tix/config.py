@@ -15,9 +15,9 @@ DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.toml"
 DEFAULT_COLUMNS = ["Triage", "Investigating", "Waiting", "In Review", "Done"]
 
 DEFAULT_STALENESS_RULES = [
-    {"column": "Investigating", "warn_after_hours": 24},
-    {"column": "Waiting", "warn_after_hours": 48},
-    {"column": "In Review", "warn_after_hours": 12},
+    {"local": "Needs Notify", "ok_zendesk": ["solved", "pending"]},
+    {"local": "Awaiting Close", "ok_zendesk": ["solved", "closed"]},
+    {"local": "PR Submitted", "ok_zendesk": ["pending", "hold"]},
 ]
 
 _SUBDOMAIN_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
@@ -37,7 +37,7 @@ class Config:
     base_branch: str = "main"
     sync_interval_seconds: int = 300
     terminal: str | None = None
-    claude_launch_command: str = "claude --dangerously-skip-permissions --remote-control"
+    claude_launch_command: str = "cld -r"
     column_names: list[str] = field(default_factory=lambda: list(DEFAULT_COLUMNS))
     staleness_rules: list[dict[str, Any]] = field(default_factory=lambda: list(DEFAULT_STALENESS_RULES))
     warn_after_hours: int = 24
@@ -98,13 +98,21 @@ def load_config(path: Path | None = None) -> Config:
     terminal = app.get("terminal") or None
     claude_cmd = app.get(
         "claude_launch_command",
-        "claude --dangerously-skip-permissions --remote-control",
+        "cld -r",
     )
 
     board = raw.get("board", {})
     column_names = board.get("columns", list(DEFAULT_COLUMNS))
-    staleness_rules = board.get("staleness_rules", list(DEFAULT_STALENESS_RULES))
     warn_after_hours = board.get("warn_after_hours", 24)
+
+    staleness_raw = board.get("staleness_rules", None)
+    if staleness_raw is not None:
+        staleness_rules = [
+            {"local": r["local"], "ok_zendesk": list(r["ok_zendesk"])}
+            for r in staleness_raw
+        ]
+    else:
+        staleness_rules = list(DEFAULT_STALENESS_RULES)
 
     return Config(
         zendesk_subdomain=subdomain,
@@ -158,23 +166,23 @@ repo_path = "~/src/myproject"
 # Terminal emulator to launch for Claude sessions (default: auto-detect)
 # terminal = "iTerm"
 # Command used to launch Claude in a worktree (default shown below)
-# claude_launch_command = "claude --dangerously-skip-permissions --remote-control"
+# claude_launch_command = "cld -r"
 
 [board]
 # Kanban column names, in display order
 # columns = ["Triage", "Investigating", "Waiting", "In Review", "Done"]
-# Hours before a card is considered stale (default: 24)
+# Hours before a stale mismatch triggers a warning (default: 24)
 # warn_after_hours = 24
-# Per-column staleness overrides
+# Staleness rules: local column + acceptable Zendesk statuses
 # [[board.staleness_rules]]
-# column = "Investigating"
-# warn_after_hours = 24
+# local = "Needs Notify"
+# ok_zendesk = ["solved", "pending"]
 # [[board.staleness_rules]]
-# column = "Waiting"
-# warn_after_hours = 48
+# local = "Awaiting Close"
+# ok_zendesk = ["solved", "closed"]
 # [[board.staleness_rules]]
-# column = "In Review"
-# warn_after_hours = 12
+# local = "PR Submitted"
+# ok_zendesk = ["pending", "hold"]
 """
     dest.write_text(content)
     return dest

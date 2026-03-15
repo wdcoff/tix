@@ -22,20 +22,20 @@ repo_path = "~/src/myproject"
 # Terminal emulator to launch for Claude sessions (default: auto-detect)
 # terminal = "iTerm"
 # Command used to launch Claude in a worktree (default shown below)
-# claude_launch_command = "claude --dangerously-skip-permissions --remote-control"
+# claude_launch_command = "cld -r"
 
 [board]
 # Kanban column names, in display order
 # columns = ["Triage", "Investigating", "Waiting", "In Review", "Done"]
-# Hours before a card is considered stale (default: 24)
+# Hours before a stale mismatch triggers a warning (default: 24)
 # warn_after_hours = 24
-# Per-column staleness overrides
+# Staleness rules: local column + acceptable Zendesk statuses
 # [[board.staleness_rules]]
-# column = "Investigating"
-# warn_after_hours = 24
+# local = "Needs Notify"
+# ok_zendesk = ["solved", "pending"]
 # [[board.staleness_rules]]
-# column = "Waiting"
-# warn_after_hours = 48
+# local = "Awaiting Close"
+# ok_zendesk = ["solved", "closed"]
 # [[board.staleness_rules]]
-# column = "In Review"
-# warn_after_hours = 12
+# local = "PR Submitted"
+# ok_zendesk = ["pending", "hold"]

@@ -14,6 +14,22 @@ from pathlib import Path
 from tix.errors import ExternalToolError
 
 
+def _escape_applescript(s: str) -> str:
+    """Escape a string for safe embedding in AppleScript double-quoted strings."""
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _escape_yaml_value(s: str) -> str:
+    """Escape a string for safe embedding in YAML values.
+
+    If the value contains any special characters, wrap it in single quotes
+    and escape embedded single quotes by doubling them.
+    """
+    if any(c in s for c in '"\'\\:#{}[]|>&*!%@`'):
+        return "'" + s.replace("'", "''") + "'"
+    return s
+
+
 _TERM_PROGRAM_MAP: dict[str, str] = {
     "WarpTerminal": "warp",
     "iTerm.app": "iterm",
@@ -81,6 +97,8 @@ def _launch_warp(cwd: Path, command: str, ticket_id: int) -> None:
 
     # Warp launch configs require absolute paths (no ~)
     abs_cwd = str(cwd.resolve())
+    safe_cwd = _escape_yaml_value(abs_cwd)
+    safe_command = _escape_yaml_value(command)
     yaml_content = textwrap.dedent(f"""\
         ---
         name: "{config_name}"
@@ -88,8 +106,8 @@ def _launch_warp(cwd: Path, command: str, ticket_id: int) -> None:
           - tabs:
               - title: "tix #{ticket_id}"
                 layout:
-                  cwd: "{abs_cwd}"
-                  command: "{command}"
+                  cwd: {safe_cwd}
+                  command: {safe_command}
     """)
     config_path.write_text(yaml_content)
 
@@ -108,13 +126,15 @@ def _launch_warp(cwd: Path, command: str, ticket_id: int) -> None:
 def _launch_iterm(cwd: Path, command: str, ticket_id: int) -> None:
     """Launch via iTerm2 AppleScript."""
     abs_cwd = str(cwd.resolve())
+    safe_cwd = _escape_applescript(abs_cwd)
+    safe_command = _escape_applescript(command)
     script = textwrap.dedent(f"""\
         tell application "iTerm"
             activate
             tell current window
                 create tab with default profile
                 tell current session
-                    write text "cd {abs_cwd} && {command}"
+                    write text "cd {safe_cwd} && {safe_command}"
                 end tell
             end tell
         end tell
@@ -134,10 +154,12 @@ def _launch_iterm(cwd: Path, command: str, ticket_id: int) -> None:
 def _launch_terminal_app(cwd: Path, command: str, ticket_id: int) -> None:
     """Launch via Terminal.app AppleScript."""
     abs_cwd = str(cwd.resolve())
+    safe_cwd = _escape_applescript(abs_cwd)
+    safe_command = _escape_applescript(command)
     script = textwrap.dedent(f"""\
         tell application "Terminal"
             activate
-            do script "cd {abs_cwd} && {command}"
+            do script "cd {safe_cwd} && {safe_command}"
         end tell
     """)
     result = subprocess.run(
