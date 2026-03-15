@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual import work
 
-from tix.config import Config, ConfigError, create_default_config, load_config
+from tix.config import (
+    Config,
+    ConfigError,
+    DEFAULT_CONFIG_PATH,
+    create_default_config,
+    load_config,
+)
 from tix.errors import GitOperationError, ExternalToolError, TixError
 from tix.models import BoardState, GitContext, PRStatus
 from tix.persistence import load_state
@@ -30,6 +39,8 @@ class TixApp(App):
         self.config = config
         self._has_config = config is not None
         self._custom_statuses_fetched = False
+        self._gh_available = False
+        self._zendesk_reachable = True
 
         # Initialize state manager (always, even without config)
         state = load_state()
@@ -51,7 +62,6 @@ class TixApp(App):
                     token=config.zendesk_token,
                 )
             except Exception:
-                # Will handle gracefully — just no sync
                 pass
 
     def on_mount(self) -> None:
@@ -60,11 +70,14 @@ class TixApp(App):
 
         if not self._has_config:
             self.notify(
-                "No config found \u2014 create ~/.config/tix/config.toml",
+                "No config found. Created template at ~/.config/tix/config.example.toml",
                 severity="warning",
                 timeout=8,
             )
         else:
+            # Run startup validation
+            self._validate_environment()
+
             self.trigger_sync()
 
             # Set up periodic sync
@@ -73,6 +86,28 @@ class TixApp(App):
                     self.config.sync_interval_seconds,
                     self.trigger_sync,
                 )
+
+    def _validate_environment(self) -> None:
+        """Check that required external tools and paths exist."""
+        assert self.config is not None
+
+        # Check git repo exists
+        repo = self.config.repo_path
+        if not (repo / ".git").exists() and not repo.exists():
+            self.notify(
+                f"Git repo not found at {repo}",
+                severity="warning",
+                timeout=6,
+            )
+
+        # Check gh CLI
+        self._gh_available = shutil.which("gh") is not None
+        if not self._gh_available:
+            self.notify(
+                "gh CLI not found; PR and deploy features disabled",
+                severity="warning",
+                timeout=6,
+            )
 
     def trigger_sync(self) -> None:
         """Public method to kick off a sync (called from screen and timer)."""
@@ -86,6 +121,7 @@ class TixApp(App):
 
         try:
             tickets = self._zendesk.fetch_open_tickets()
+            self._zendesk_reachable = True
 
             # Fetch custom statuses once
             custom_statuses = None
@@ -103,35 +139,36 @@ class TixApp(App):
             for ticket in self.manager.state.tickets:
                 update_staleness(ticket, staleness_rules)
 
-            # --- PR detection ---
-            branch_names = [
-                ticket.git.branch_name
-                for ticket in self.manager.state.tickets
-                if ticket.git.branch_name
-            ]
-            if branch_names:
-                pr_map = check_all_prs(branch_names)
-                for ticket in self.manager.state.tickets:
-                    bn = ticket.git.branch_name
-                    if bn and bn in pr_map:
-                        ticket.pr = pr_map[bn]
-
-                # --- Deploy detection for merged PRs ---
-                merged_tickets = [
-                    t for t in self.manager.state.tickets
-                    if t.pr.status == PRStatus.MERGED
-                    and t.pr.merge_sha
-                    and not t.deployed_in_tag
+            # --- PR detection (only if gh is available) ---
+            if self._gh_available:
+                branch_names = [
+                    ticket.git.branch_name
+                    for ticket in self.manager.state.tickets
+                    if ticket.git.branch_name
                 ]
-                if merged_tickets and self.config:
-                    maybe_fetch_tags(self.config.repo_path)
-                    for ticket in merged_tickets:
-                        assert ticket.pr.merge_sha is not None
-                        tag = check_deploy(
-                            self.config.repo_path, ticket.pr.merge_sha
-                        )
-                        if tag:
-                            ticket.deployed_in_tag = tag
+                if branch_names:
+                    pr_map = check_all_prs(branch_names)
+                    for ticket in self.manager.state.tickets:
+                        bn = ticket.git.branch_name
+                        if bn and bn in pr_map:
+                            ticket.pr = pr_map[bn]
+
+                    # --- Deploy detection for merged PRs ---
+                    merged_tickets = [
+                        t for t in self.manager.state.tickets
+                        if t.pr.status == PRStatus.MERGED
+                        and t.pr.merge_sha
+                        and not t.deployed_in_tag
+                    ]
+                    if merged_tickets and self.config:
+                        maybe_fetch_tags(self.config.repo_path)
+                        for ticket in merged_tickets:
+                            assert ticket.pr.merge_sha is not None
+                            tag = check_deploy(
+                                self.config.repo_path, ticket.pr.merge_sha
+                            )
+                            if tag:
+                                ticket.deployed_in_tag = tag
 
             self.manager.save()
 
@@ -140,7 +177,11 @@ class TixApp(App):
             self.call_from_thread(self._post_sync_refresh, count, None)
 
         except TixError as exc:
-            self.call_from_thread(self._post_sync_refresh, 0, str(exc))
+            self._zendesk_reachable = False
+            error_msg = str(exc)
+            if self.manager.state.tickets:
+                error_msg += " (showing cached data)"
+            self.call_from_thread(self._post_sync_refresh, len(self.manager.state.tickets), error_msg)
 
     def _post_sync_refresh(self, count: int, error: str | None) -> None:
         """Refresh UI after sync (must be called from main thread)."""
@@ -237,6 +278,7 @@ class TixApp(App):
     # ------------------------------------------------------------------
 
     def on_unmount(self) -> None:
+        """Save state and close services on shutdown."""
         if self.manager is not None:
             try:
                 self.manager.save()
@@ -250,14 +292,26 @@ class TixApp(App):
 
 
 def main() -> None:
+    """Entry point for the tix command."""
     config: Config | None = None
     try:
         config = load_config()
     except ConfigError:
-        create_default_config()
+        # Create example config so user has a template
+        created = create_default_config()
+        # Also create the actual config.toml if it doesn't exist
+        if not DEFAULT_CONFIG_PATH.exists():
+            example = created
+            if example.exists():
+                DEFAULT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+                DEFAULT_CONFIG_PATH.write_text(example.read_text())
 
-    app = TixApp(config)
-    app.run()
+    try:
+        app = TixApp(config)
+        app.run()
+    except KeyboardInterrupt:
+        # Graceful exit on Ctrl+C
+        pass
 
 
 if __name__ == "__main__":

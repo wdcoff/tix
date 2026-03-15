@@ -4,8 +4,9 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import HorizontalScroll
 from textual.screen import Screen
-from textual.widgets import Footer
+from textual.widgets import Footer, Input
 
+from tix.screens.ticket_detail import TicketDetailScreen
 from tix.widgets.card import TicketCardWidget
 from tix.widgets.column import KanbanColumn
 from tix.widgets.status_bar import SyncStatusBar
@@ -21,7 +22,8 @@ class BoardScreen(Screen):
         Binding("l,right", "column_right", "Next column", show=True),
         Binding("enter", "select_card", "Open card", show=True),
         Binding("r", "sync", "Sync", show=True),
-        Binding("d", "detail", "Detail", show=False),
+        Binding("d", "detail", "Detail", show=True),
+        Binding("slash", "search", "Search", show=True),
         Binding("q", "quit", "Quit", show=True),
     ]
 
@@ -30,13 +32,24 @@ class BoardScreen(Screen):
         self._column_names = column_names
         self._current_col_idx = 0
         self._current_card_idx = 0
+        self._filter_text: str = ""
 
     def compose(self) -> ComposeResult:
+        yield Input(
+            placeholder="Search tickets (ID or subject)...",
+            id="search-input",
+        )
         with HorizontalScroll(id="board-container"):
             for name in self._column_names:
                 yield KanbanColumn(name, id=f"col-{name.lower().replace(' ', '-')}")
         yield SyncStatusBar(id="status-bar")
         yield Footer()
+
+    def on_mount(self) -> None:
+        # Hide the search input initially
+        search = self.query_one("#search-input", Input)
+        search.display = False
+        self.refresh_board()
 
     @property
     def columns(self) -> list[KanbanColumn]:
@@ -48,8 +61,61 @@ class BoardScreen(Screen):
         return self.query_one("#status-bar", SyncStatusBar)
 
     # ------------------------------------------------------------------
+    # Search / Filter
+    # ------------------------------------------------------------------
+
+    def action_search(self) -> None:
+        """Show the search input and focus it."""
+        search = self.query_one("#search-input", Input)
+        search.display = True
+        search.value = self._filter_text
+        search.focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Live-filter cards as the user types."""
+        if event.input.id == "search-input":
+            self._filter_text = event.value
+            self._apply_filter()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Keep filter and return focus to the board on Enter."""
+        if event.input.id == "search-input":
+            self._filter_text = event.value
+            search = self.query_one("#search-input", Input)
+            search.display = False
+            self._apply_filter()
+            # Return focus to a card
+            self._focus_card_at(self._current_col_idx, self._current_card_idx)
+
+    def key_escape(self) -> None:
+        """If search is visible, clear filter and hide it."""
+        search = self.query_one("#search-input", Input)
+        if search.display:
+            self._filter_text = ""
+            search.value = ""
+            search.display = False
+            self._apply_filter()
+            self._focus_card_at(self._current_col_idx, self._current_card_idx)
+
+    def _apply_filter(self) -> None:
+        """Show/hide cards based on current filter text."""
+        query = self._filter_text.strip().lower()
+        for card in self.query(TicketCardWidget):
+            if not query:
+                card.display = True
+            else:
+                ticket = card.ticket
+                id_match = query in str(ticket.ticket_id)
+                subject_match = query in (ticket.subject or "").lower()
+                card.display = id_match or subject_match
+
+    # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
+
+    def _visible_cards(self, col: KanbanColumn) -> list[TicketCardWidget]:
+        """Return only visible (not filtered out) cards in a column."""
+        return [c for c in col.card_widgets() if c.display]
 
     def _focus_card_at(self, col_idx: int, card_idx: int) -> None:
         """Focus a specific card by column and card index."""
@@ -58,9 +124,8 @@ class BoardScreen(Screen):
             return
         col_idx = max(0, min(col_idx, len(cols) - 1))
         self._current_col_idx = col_idx
-        cards = cols[col_idx].card_widgets()
+        cards = self._visible_cards(cols[col_idx])
         if not cards:
-            # No cards in this column — just track position
             self._current_card_idx = 0
             return
         card_idx = max(0, min(card_idx, len(cards) - 1))
@@ -72,7 +137,7 @@ class BoardScreen(Screen):
         focused = self.app.focused
         if isinstance(focused, TicketCardWidget):
             for ci, col in enumerate(self.columns):
-                cards = col.card_widgets()
+                cards = self._visible_cards(col)
                 for ri, card in enumerate(cards):
                     if card is focused:
                         return ci, ri
@@ -106,9 +171,10 @@ class BoardScreen(Screen):
         self.app.trigger_sync()  # type: ignore[attr-defined]
 
     def action_detail(self) -> None:
+        """Open the ticket detail modal for the focused card."""
         focused = self.app.focused
         if isinstance(focused, TicketCardWidget):
-            self.app.notify(f"Detail view placeholder for #{focused.ticket.ticket_id}")
+            self.app.push_screen(TicketDetailScreen(focused.ticket))
 
     def action_quit(self) -> None:
         self.app.exit()
@@ -132,7 +198,6 @@ class BoardScreen(Screen):
         if manager is None:
             return
 
-        # Find current column for this ticket
         current_col: str | None = None
         for ticket in manager.state.tickets:
             if ticket.ticket_id == ticket_id:
@@ -158,7 +223,6 @@ class BoardScreen(Screen):
             return
 
         self.refresh_board()
-        # Focus the moved card in its new column
         self._focus_card_at(new_idx, 0)
 
     # ------------------------------------------------------------------
@@ -176,7 +240,6 @@ class BoardScreen(Screen):
         for col_widget in self.columns:
             col_widget.clear_tickets()
             tickets = cards_by_col.get(col_widget.column_name, [])
-            # Sort by priority (urgent first), then by updated_at
             priority_order = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
             tickets.sort(
                 key=lambda t: (
@@ -188,12 +251,11 @@ class BoardScreen(Screen):
                 col_widget.add_ticket(ticket)
             col_widget._update_title()
 
-        # Update status bar with ticket count
+        # Re-apply active filter
+        if self._filter_text:
+            self._apply_filter()
+
         total = len(manager.state.tickets)
         self.status_bar.update_sync(total)
 
-        # Try to restore focus
         self._focus_card_at(self._current_col_idx, self._current_card_idx)
-
-    def on_mount(self) -> None:
-        self.refresh_board()
