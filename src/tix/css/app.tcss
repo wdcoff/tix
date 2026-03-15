@@ -1,0 +1,56 @@
+/* Board layout */
+BoardScreen {
+    layout: vertical;
+}
+
+#board-container {
+    height: 1fr;
+}
+
+KanbanColumn {
+    width: 42;
+    min-width: 35;
+    height: 100%;
+    margin: 0 1;
+    border: solid $secondary;
+    background: $surface;
+}
+
+TicketCardWidget {
+    height: auto;
+    min-height: 3;
+    max-height: 7;
+    margin: 0 0 1 0;
+    padding: 0 1;
+    background: $panel;
+    border-left: tall $primary;
+}
+
+TicketCardWidget:focus {
+    border-left: tall $accent;
+    background: $boost;
+}
+
+TicketCardWidget.priority-urgent {
+    border-left: tall red;
+}
+
+TicketCardWidget.priority-high {
+    border-left: tall yellow;
+}
+
+TicketCardWidget.priority-low {
+    border-left: tall $text-muted;
+}
+
+TicketCardWidget.stale {
+    background: $warning 15%;
+}
+
+SyncStatusBar {
+    dock: bottom;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    padding: 0 1;
+}
