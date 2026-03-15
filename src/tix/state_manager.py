@@ -4,8 +4,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from tix.models import BoardState, Priority, TicketData
+from tix.models import BoardState, PRContext, Priority, TicketData
 from tix.persistence import save_state
+from tix.services.staleness import update_staleness
 
 
 class StateManager:
@@ -165,6 +166,33 @@ class StateManager:
             else:
                 still_active.append(ticket)
         self.state.tickets = still_active
+
+    # ------------------------------------------------------------------
+    # PR / deploy / staleness
+    # ------------------------------------------------------------------
+
+    def update_pr(self, ticket_id: int, pr_context: PRContext) -> None:
+        """Set the PR context on a ticket."""
+        for ticket in self.state.tickets:
+            if ticket.ticket_id == ticket_id:
+                ticket.pr = pr_context
+                return
+        raise KeyError(f"Ticket {ticket_id} not found in active tickets")
+
+    def mark_deployed(self, ticket_id: int, tag: str) -> None:
+        """Set deployed_in_tag on a ticket."""
+        for ticket in self.state.tickets:
+            if ticket.ticket_id == ticket_id:
+                ticket.deployed_in_tag = tag
+                return
+        raise KeyError(f"Ticket {ticket_id} not found in active tickets")
+
+    def update_staleness_all(
+        self, rules: list[dict], warn_after_hours: int = 24
+    ) -> None:
+        """Run update_staleness on all active tickets."""
+        for ticket in self.state.tickets:
+            update_staleness(ticket, rules)
 
     # ------------------------------------------------------------------
     # Persistence

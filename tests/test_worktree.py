@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from tix.errors import GitOperationError
-from tix.services.worktree import _clean_env, create_worktree, worktree_exists
+from tix.services.worktree import create_worktree, worktree_exists
+from tix.subprocess_utils import clean_env
 
 
 class TestBranchNameValidation:
@@ -77,20 +78,95 @@ class TestPathTraversal:
             )
 
 
+class TestBaseBranchValidation:
+    """create_worktree must reject invalid base branch names."""
+
+    @pytest.mark.parametrize(
+        "base",
+        [
+            "has space",
+            "semi;colon",
+            "back`tick",
+            "dollar$sign",
+            "pipe|char",
+            "new\nline",
+            "",
+        ],
+    )
+    def test_invalid_base_branch_raises(self, base: str, tmp_path: Path) -> None:
+        with pytest.raises(GitOperationError, match="Invalid base branch name"):
+            create_worktree(
+                repo_path=tmp_path,
+                worktree_dir=tmp_path / "wt",
+                branch_name="valid-branch",
+                base_branch=base,
+            )
+
+    @pytest.mark.parametrize(
+        "base",
+        ["main", "develop", "release/1.0", "my.branch"],
+    )
+    def test_valid_base_branch_passes_validation(self, base: str, tmp_path: Path) -> None:
+        """Valid base branches pass validation but fail at git subprocess."""
+        with pytest.raises(GitOperationError, match="Failed to create worktree"):
+            create_worktree(
+                repo_path=tmp_path,
+                worktree_dir=tmp_path / "wt",
+                branch_name="valid-branch",
+                base_branch=base,
+            )
+
+
 class TestCleanEnv:
-    """_clean_env must strip ZENDESK_API_TOKEN."""
+    """clean_env must strip sensitive environment variables."""
 
     def test_strips_zendesk_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ZENDESK_API_TOKEN", "secret-token")
         monkeypatch.setenv("HOME", "/home/test")
-        env = _clean_env()
+        env = clean_env()
         assert "ZENDESK_API_TOKEN" not in env
         assert env["HOME"] == "/home/test"
 
     def test_works_when_token_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("ZENDESK_API_TOKEN", raising=False)
-        env = _clean_env()
+        env = clean_env()
         assert "ZENDESK_API_TOKEN" not in env
+
+    @pytest.mark.parametrize(
+        "var_name",
+        [
+            "ZENDESK_API_TOKEN",
+            "AWS_SECRET_ACCESS_KEY",
+            "GITHUB_TOKEN",
+            "DB_PASSWORD",
+            "MY_SECRET_VALUE",
+            "SSH_KEY",
+            "SERVICE_CREDENTIAL",
+            "some_token_here",
+            "my_password_var",
+        ],
+    )
+    def test_strips_secret_patterns(self, var_name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(var_name, "sensitive-value")
+        env = clean_env()
+        assert var_name not in env
+
+    @pytest.mark.parametrize(
+        "var_name",
+        [
+            "HOME",
+            "PATH",
+            "SHELL",
+            "TERM",
+            "LANG",
+            "USER",
+            "EDITOR",
+        ],
+    )
+    def test_preserves_safe_vars(self, var_name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(var_name, "safe-value")
+        env = clean_env()
+        assert env[var_name] == "safe-value"
 
 
 class TestWorktreeExists:

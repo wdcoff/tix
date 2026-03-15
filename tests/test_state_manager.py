@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from tix.models import BoardState, Priority, TicketData
+from tix.models import BoardState, PRContext, PRStatus, Priority, TicketData
 from tix.state_manager import StateManager
 
 
@@ -175,3 +175,87 @@ class TestGetCardsByColumn:
         assert len(by_col["Triage"]) == 2
         assert len(by_col["Investigating"]) == 1
         assert by_col["Investigating"][0].ticket_id == 2
+
+
+class TestUpdatePr:
+    def test_update_pr_sets_pr_context(self):
+        ticket = TicketData(
+            ticket_id=1,
+            subject="Test",
+            zendesk_status="open",
+            local_column="Triage",
+        )
+        mgr = StateManager(BoardState(tickets=[ticket]))
+        pr = PRContext(url="https://github.com/org/repo/pull/42", status=PRStatus.OPEN)
+
+        mgr.update_pr(1, pr)
+
+        assert mgr.state.tickets[0].pr.url == "https://github.com/org/repo/pull/42"
+        assert mgr.state.tickets[0].pr.status == PRStatus.OPEN
+
+    def test_update_pr_nonexistent_raises(self):
+        mgr = StateManager(BoardState())
+        try:
+            mgr.update_pr(999, PRContext())
+            assert False, "Expected KeyError"
+        except KeyError:
+            pass
+
+
+class TestMarkDeployed:
+    def test_mark_deployed_sets_tag(self):
+        ticket = TicketData(
+            ticket_id=1,
+            subject="Test",
+            zendesk_status="open",
+            local_column="Triage",
+        )
+        mgr = StateManager(BoardState(tickets=[ticket]))
+
+        mgr.mark_deployed(1, "v1.2.3")
+
+        assert mgr.state.tickets[0].deployed_in_tag == "v1.2.3"
+
+    def test_mark_deployed_nonexistent_raises(self):
+        mgr = StateManager(BoardState())
+        try:
+            mgr.mark_deployed(999, "v1.0.0")
+            assert False, "Expected KeyError"
+        except KeyError:
+            pass
+
+
+class TestUpdateStalenessAll:
+    def test_update_staleness_all_runs_on_all_tickets(self):
+        """Tickets in a mismatched column get stale_since set; others get it cleared."""
+        rules = [{"local": "Needs Notify", "ok_zendesk": ["solved", "pending"]}]
+        tickets = [
+            TicketData(
+                ticket_id=1,
+                subject="Mismatched",
+                zendesk_status="open",
+                local_column="Needs Notify",
+            ),
+            TicketData(
+                ticket_id=2,
+                subject="Matched",
+                zendesk_status="solved",
+                local_column="Needs Notify",
+            ),
+            TicketData(
+                ticket_id=3,
+                subject="No rule",
+                zendesk_status="open",
+                local_column="Triage",
+            ),
+        ]
+        mgr = StateManager(BoardState(tickets=tickets))
+
+        mgr.update_staleness_all(rules, warn_after_hours=24)
+
+        # Ticket 1: mismatched, stale_since should be set
+        assert mgr.state.tickets[0].stale_since is not None
+        # Ticket 2: matched, stale_since should be None
+        assert mgr.state.tickets[1].stale_since is None
+        # Ticket 3: no rule, stale_since should be None
+        assert mgr.state.tickets[2].stale_since is None

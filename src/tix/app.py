@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
-import sys
 from pathlib import Path
 
-from textual.app import App, ComposeResult
+from textual.app import App
 from textual import work
 
 from tix.config import (
@@ -15,16 +13,15 @@ from tix.config import (
     create_default_config,
     load_config,
 )
-from tix.errors import GitOperationError, ExternalToolError, TixError
-from tix.models import BoardState, GitContext, PRStatus
+from tix.errors import GitOperationError, ExternalToolError
+from tix.models import GitContext
 from tix.persistence import load_state
 from tix.screens.board import BoardScreen
-from tix.services.deploy_tracker import check_deploy, maybe_fetch_tags
-from tix.services.pr_tracker import check_all_prs, is_gh_available
-from tix.services.staleness import update_staleness
+from tix.services.deploy_tracker import DeployTracker
 from tix.services.terminal_launcher import launch_terminal
 from tix.services.worktree import create_worktree, worktree_exists
 from tix.state_manager import StateManager
+from tix.sync import SyncCoordinator
 from tix.widgets.card import TicketCardWidget
 
 
@@ -38,7 +35,6 @@ class TixApp(App):
         super().__init__()
         self.config = config
         self._has_config = config is not None
-        self._custom_statuses_fetched = False
         self._gh_available = False
         self._zendesk_reachable = True
 
@@ -51,8 +47,10 @@ class TixApp(App):
         )
         self._column_names = column_names
 
-        # Initialize Zendesk service (only if config is present)
+        # Initialize Zendesk service and sync coordinator (only if config is present)
         self._zendesk = None
+        self._sync_coordinator: SyncCoordinator | None = None
+        self._init_error: str | None = None
         if config is not None:
             try:
                 from tix.services.zendesk import ZendeskService
@@ -61,12 +59,22 @@ class TixApp(App):
                     email=config.zendesk_email,
                     token=config.zendesk_token,
                 )
-            except Exception:
-                pass
+                self._deploy_tracker = DeployTracker()
+            except Exception as e:
+                self._zendesk = None
+                # Will be surfaced as a warning after mount
+                self._init_error = str(e)
 
     def on_mount(self) -> None:
         board = BoardScreen(column_names=self._column_names)
         self.push_screen(board)
+
+        if self._init_error is not None:
+            self.notify(
+                f"Zendesk init failed: {self._init_error}",
+                severity="warning",
+                timeout=8,
+            )
 
         if not self._has_config:
             self.notify(
@@ -89,7 +97,8 @@ class TixApp(App):
 
     def _validate_environment(self) -> None:
         """Check that required external tools and paths exist."""
-        assert self.config is not None
+        if self.config is None:
+            return
 
         # Check git repo exists
         repo = self.config.repo_path
@@ -109,79 +118,35 @@ class TixApp(App):
                 timeout=6,
             )
 
+        # Build the sync coordinator now that gh_available is known
+        if self._zendesk is not None:
+            self._sync_coordinator = SyncCoordinator(
+                zendesk_service=self._zendesk,
+                state_manager=self.manager,
+                deploy_tracker=self._deploy_tracker,
+                config=self.config,
+                gh_available=self._gh_available,
+            )
+
     def trigger_sync(self) -> None:
         """Public method to kick off a sync (called from screen and timer)."""
-        if self._zendesk is not None:
+        if self._sync_coordinator is not None:
             self._do_sync()
 
     @work(exclusive=True, thread=True, group="zendesk")
     def _do_sync(self) -> None:
-        """Background sync: fetch from Zendesk and update state."""
-        assert self._zendesk is not None
+        """Background sync: delegate to SyncCoordinator and refresh UI."""
+        if self._sync_coordinator is None:
+            return
 
-        try:
-            tickets = self._zendesk.fetch_open_tickets()
+        count, error = self._sync_coordinator.run_sync()
+
+        if error is None:
             self._zendesk_reachable = True
-
-            # Fetch custom statuses once
-            custom_statuses = None
-            if not self._custom_statuses_fetched:
-                custom_statuses = self._zendesk.fetch_custom_statuses()
-                self._custom_statuses_fetched = True
-
-            self.manager.apply_sync(tickets, custom_statuses)
-            self.manager.archive_closed_tickets()
-
-            # --- Staleness update ---
-            staleness_rules = (
-                self.config.staleness_rules if self.config else []
-            )
-            for ticket in self.manager.state.tickets:
-                update_staleness(ticket, staleness_rules)
-
-            # --- PR detection (only if gh is available) ---
-            if self._gh_available:
-                branch_names = [
-                    ticket.git.branch_name
-                    for ticket in self.manager.state.tickets
-                    if ticket.git.branch_name
-                ]
-                if branch_names:
-                    pr_map = check_all_prs(branch_names)
-                    for ticket in self.manager.state.tickets:
-                        bn = ticket.git.branch_name
-                        if bn and bn in pr_map:
-                            ticket.pr = pr_map[bn]
-
-                    # --- Deploy detection for merged PRs ---
-                    merged_tickets = [
-                        t for t in self.manager.state.tickets
-                        if t.pr.status == PRStatus.MERGED
-                        and t.pr.merge_sha
-                        and not t.deployed_in_tag
-                    ]
-                    if merged_tickets and self.config:
-                        maybe_fetch_tags(self.config.repo_path)
-                        for ticket in merged_tickets:
-                            assert ticket.pr.merge_sha is not None
-                            tag = check_deploy(
-                                self.config.repo_path, ticket.pr.merge_sha
-                            )
-                            if tag:
-                                ticket.deployed_in_tag = tag
-
-            self.manager.save()
-
-            count = len(self.manager.state.tickets)
-
-            self.call_from_thread(self._post_sync_refresh, count, None)
-
-        except TixError as exc:
+        else:
             self._zendesk_reachable = False
-            error_msg = str(exc)
-            if self.manager.state.tickets:
-                error_msg += " (showing cached data)"
-            self.call_from_thread(self._post_sync_refresh, len(self.manager.state.tickets), error_msg)
+
+        self.call_from_thread(self._post_sync_refresh, count, error)
 
     def _post_sync_refresh(self, count: int, error: str | None) -> None:
         """Refresh UI after sync (must be called from main thread)."""
@@ -207,7 +172,8 @@ class TixApp(App):
     @work(exclusive=False, thread=True, group="open-ticket")
     def _open_ticket(self, ticket_id: int) -> None:
         """Create worktree if needed and launch a terminal session."""
-        assert self.config is not None
+        if self.config is None:
+            return
 
         # Find the ticket
         ticket = None
@@ -244,7 +210,11 @@ class TixApp(App):
             )
             return
 
-        assert worktree_path is not None
+        if worktree_path is None:
+            self.call_from_thread(
+                self.notify, "Worktree path is unexpectedly None", severity="error"
+            )
+            return
 
         # Launch terminal
         terminal_name = self.config.terminal

@@ -28,7 +28,6 @@ class KanbanColumn(VerticalScroll):
         """Mount a new card widget for the given ticket."""
         card = TicketCardWidget(ticket)
         self.mount(card)
-        self._update_title()
         return card
 
     def remove_ticket(self, ticket_id: int) -> None:
@@ -41,8 +40,7 @@ class KanbanColumn(VerticalScroll):
 
     def clear_tickets(self) -> None:
         """Remove all ticket cards from this column."""
-        for child in list(self.query(TicketCardWidget)):
-            child.remove()
+        self.query(TicketCardWidget).remove()
         self._update_title()
 
     def card_widgets(self) -> list[TicketCardWidget]:

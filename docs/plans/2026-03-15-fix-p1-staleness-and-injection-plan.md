@@ -1,7 +1,7 @@
 ---
 title: "fix: P1 staleness schema mismatch and terminal launcher injection"
 type: fix
-status: active
+status: completed
 date: 2026-03-15
 ---
 

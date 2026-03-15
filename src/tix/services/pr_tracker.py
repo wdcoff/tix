@@ -10,7 +10,7 @@ import json
 import subprocess
 
 from tix.models import PRContext, PRStatus
-from tix.services.worktree import _clean_env
+from tix.subprocess_utils import clean_env
 
 
 def check_all_prs(branch_names: list[str]) -> dict[str, PRContext]:
@@ -29,7 +29,7 @@ def check_all_prs(branch_names: list[str]) -> dict[str, PRContext]:
         ],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     if result.returncode != 0:
         return {}  # gh not installed or not authed -- degrade gracefully
@@ -77,7 +77,7 @@ def is_gh_available() -> bool:
             ["gh", "auth", "status"],
             capture_output=True,
             text=True,
-            env=_clean_env(),
+            env=clean_env(),
         )
         return result.returncode == 0
     except FileNotFoundError:

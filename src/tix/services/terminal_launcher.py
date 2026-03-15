@@ -2,7 +2,7 @@
 
 Detects the running terminal via ``$TERM_PROGRAM`` and dispatches to the
 appropriate launch mechanism.  All subprocess calls use ``shell=False`` and
-strip ``ZENDESK_API_TOKEN`` from the child environment.
+strip sensitive environment variables from the child environment.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import textwrap
 from pathlib import Path
 
 from tix.errors import ExternalToolError
+from tix.subprocess_utils import clean_env
 
 
 def _escape_applescript(s: str) -> str:
@@ -36,11 +37,6 @@ _TERM_PROGRAM_MAP: dict[str, str] = {
     "Apple_Terminal": "terminal",
     "kitty": "kitty",
 }
-
-
-def _clean_env() -> dict[str, str]:
-    """Return environment with sensitive vars stripped."""
-    return {k: v for k, v in os.environ.items() if k != "ZENDESK_API_TOKEN"}
 
 
 def _detect_terminal() -> str:
@@ -115,7 +111,7 @@ def _launch_warp(cwd: Path, command: str, ticket_id: int) -> None:
         ["open", f"warp://launch/{config_name}"],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     if result.returncode != 0:
         raise ExternalToolError(
@@ -143,7 +139,7 @@ def _launch_iterm(cwd: Path, command: str, ticket_id: int) -> None:
         ["osascript", "-e", script],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     if result.returncode != 0:
         raise ExternalToolError(
@@ -166,7 +162,7 @@ def _launch_terminal_app(cwd: Path, command: str, ticket_id: int) -> None:
         ["osascript", "-e", script],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     if result.returncode != 0:
         raise ExternalToolError(
@@ -187,7 +183,7 @@ def _launch_kitty(cwd: Path, command: str, ticket_id: int) -> None:
         ],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     if result.returncode != 0:
         raise ExternalToolError(

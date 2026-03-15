@@ -11,6 +11,8 @@ from tix.widgets.card import TicketCardWidget
 from tix.widgets.column import KanbanColumn
 from tix.widgets.status_bar import SyncStatusBar
 
+PRIORITY_ORDER = {"urgent": 0, "high": 1, "normal": 2, "low": 3, None: 4}
+
 
 class BoardScreen(Screen):
     """Main Kanban board screen."""
@@ -240,10 +242,9 @@ class BoardScreen(Screen):
         for col_widget in self.columns:
             col_widget.clear_tickets()
             tickets = cards_by_col.get(col_widget.column_name, [])
-            priority_order = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
             tickets.sort(
                 key=lambda t: (
-                    priority_order.get(t.priority.value if t.priority else "normal", 2),
+                    PRIORITY_ORDER.get(t.priority.value if t.priority else "normal", 2),
                     t.updated_at or t.created_at or t.last_synced_at,
                 )
             )

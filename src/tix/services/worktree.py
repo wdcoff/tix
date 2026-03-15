@@ -1,21 +1,16 @@
 """Git worktree operations as plain functions.
 
-All subprocess calls use shell=False and strip ZENDESK_API_TOKEN from the
-environment passed to child processes.
+All subprocess calls use shell=False and strip sensitive environment
+variables from the child process environment.
 """
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from pathlib import Path
 
 from tix.errors import GitOperationError
-
-
-def _clean_env() -> dict[str, str]:
-    """Return environment with sensitive vars stripped."""
-    return {k: v for k, v in os.environ.items() if k != "ZENDESK_API_TOKEN"}
+from tix.subprocess_utils import clean_env
 
 
 def create_worktree(
@@ -31,6 +26,10 @@ def create_worktree(
     # Validate branch name
     if not re.match(r"^[a-zA-Z0-9._/-]+$", branch_name):
         raise GitOperationError(f"Invalid branch name: {branch_name}")
+
+    # Validate base_branch with the same rules
+    if not re.match(r"^[a-zA-Z0-9._/-]+$", base_branch):
+        raise GitOperationError(f"Invalid base branch name: {base_branch}")
 
     worktree_path = worktree_dir / branch_name
 
@@ -50,7 +49,7 @@ def create_worktree(
         ],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     if result.returncode != 0:
         # Branch might already exist, try without -b
@@ -62,7 +61,7 @@ def create_worktree(
             ],
             capture_output=True,
             text=True,
-            env=_clean_env(),
+            env=clean_env(),
         )
         if result.returncode != 0:
             raise GitOperationError(
@@ -80,7 +79,7 @@ def worktree_exists(path: Path) -> bool:
         ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     return result.returncode == 0
 
@@ -94,7 +93,7 @@ def remove_worktree(repo_path: Path, worktree_path: Path) -> None:
         ],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     if result.returncode != 0:
         raise GitOperationError(
@@ -111,7 +110,7 @@ def list_worktrees(repo_path: Path) -> list[dict[str, str]]:
         ["git", "-C", str(repo_path), "worktree", "list", "--porcelain"],
         capture_output=True,
         text=True,
-        env=_clean_env(),
+        env=clean_env(),
     )
     if result.returncode != 0:
         return []

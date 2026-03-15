@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,6 +56,15 @@ def load_config(path: Path | None = None) -> Config:
         raise ConfigError(
             f"Config file not found at {config_path}. "
             f"Run 'tix' once to generate a template at ~/.config/tix/config.example.toml"
+        )
+
+    # Warn if config file is readable by group or others
+    mode = config_path.stat().st_mode
+    if mode & (stat.S_IRGRP | stat.S_IROTH):
+        print(
+            f"WARNING: {config_path} is readable by group/others "
+            f"(mode {oct(mode & 0o777)}). Consider running: "
+            f"chmod 600 {config_path}"
         )
 
     with open(config_path, "rb") as f:
@@ -184,5 +194,7 @@ repo_path = "~/src/myproject"
 # local = "PR Submitted"
 # ok_zendesk = ["pending", "hold"]
 """
-    dest.write_text(content)
+    fd = os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(content)
     return dest
