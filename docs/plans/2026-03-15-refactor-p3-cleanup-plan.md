@@ -1,7 +1,7 @@
 ---
 title: "refactor: P3 cleanup — dead code, naming, tests, logging"
 type: refactor
-status: active
+status: completed
 date: 2026-03-15
 ---
 

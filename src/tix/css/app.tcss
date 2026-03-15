@@ -49,7 +49,7 @@ TicketCardWidget.priority-high {
 }
 
 TicketCardWidget.priority-low {
-    border-left: tall $text-muted;
+    border-left: tall grey;
 }
 
 TicketCardWidget.stale {
