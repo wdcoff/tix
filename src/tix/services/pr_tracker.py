@@ -28,7 +28,7 @@ def check_all_prs(branch_names: list[str]) -> dict[str, PRContext]:
     result = subprocess.run(
         [
             "gh", "pr", "list", "--state", "all", "--json",
-            "headRefName,url,state,mergeCommit", "--limit", "200",
+            "headRefName,url,state,mergeCommit,number,repository", "--limit", "200",
         ],
         capture_output=True,
         text=True,
@@ -65,10 +65,15 @@ def check_all_prs(branch_names: list[str]) -> dict[str, PRContext]:
                 else None
             )
 
+            repo_data = pr.get("repository") or {}
+            repo_name = repo_data.get("nameWithOwner") if isinstance(repo_data, dict) else None
+
             result_map[head] = PRContext(
                 url=pr.get("url"),
                 status=pr_status,
                 merge_sha=merge_sha,
+                number=pr.get("number"),
+                repo=repo_name,
             )
 
     logger.info("PR check complete: %d PRs matched out of %d branches", len(result_map), len(branch_names))

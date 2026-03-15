@@ -70,12 +70,16 @@ class PRContext:
     url: str | None = None
     status: PRStatus | None = None
     merge_sha: str | None = None
+    number: int | None = None
+    repo: str | None = None  # "owner/repo" format
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "url": self.url,
             "status": self.status.value if self.status is not None else None,
             "merge_sha": self.merge_sha,
+            "number": self.number,
+            "repo": self.repo,
         }
 
     @classmethod
@@ -85,6 +89,8 @@ class PRContext:
             url=data.get("url"),
             status=PRStatus(raw_status) if raw_status is not None else None,
             merge_sha=data.get("merge_sha"),
+            number=data.get("number"),
+            repo=data.get("repo"),
         )
 
 

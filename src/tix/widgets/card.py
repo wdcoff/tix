@@ -127,7 +127,14 @@ class TicketCardWidget(Static):
                 "closed": "red",
             }
             color = pr_colors.get(t.pr.status.value, "white")
-            parts.append(f"[{color}]PR:{t.pr.status.value}[/]")
+            pr_label = "PR"
+            if t.pr.number:
+                pr_label = f"PR#{t.pr.number}"
+            if t.pr.repo:
+                # Show just the repo name, not owner/repo
+                short_repo = t.pr.repo.split("/")[-1] if "/" in t.pr.repo else t.pr.repo
+                pr_label = f"{short_repo}#{t.pr.number or '?'}"
+            parts.append(f"[{color}]{pr_label}:{t.pr.status.value}[/]")
 
         # Deploy tag
         if t.deployed_in_tag:
