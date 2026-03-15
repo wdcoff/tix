@@ -6,10 +6,12 @@ from textual.app import App, ComposeResult
 from textual import work
 
 from tix.config import Config, ConfigError, create_default_config, load_config
-from tix.errors import TixError
-from tix.models import BoardState
+from tix.errors import GitOperationError, ExternalToolError, TixError
+from tix.models import BoardState, GitContext
 from tix.persistence import load_state
 from tix.screens.board import BoardScreen
+from tix.services.terminal_launcher import launch_terminal
+from tix.services.worktree import create_worktree, worktree_exists
 from tix.state_manager import StateManager
 from tix.widgets.card import TicketCardWidget
 
@@ -115,7 +117,79 @@ class TixApp(App):
     def on_ticket_card_widget_card_selected(
         self, event: TicketCardWidget.CardSelected
     ) -> None:
-        self.notify(f"Would open ticket #{event.ticket_id}")
+        if self.config is None:
+            self.notify("No config — cannot open ticket", severity="warning")
+            return
+        self._open_ticket(event.ticket_id)
+
+    @work(exclusive=False, thread=True, group="open-ticket")
+    def _open_ticket(self, ticket_id: int) -> None:
+        """Create worktree if needed and launch a terminal session."""
+        assert self.config is not None
+
+        # Find the ticket
+        ticket = None
+        for t in self.manager.state.tickets:
+            if t.ticket_id == ticket_id:
+                ticket = t
+                break
+        if ticket is None:
+            self.call_from_thread(
+                self.notify, f"Ticket #{ticket_id} not found", severity="error"
+            )
+            return
+
+        branch_name = f"ticket-{ticket_id}"
+        worktree_path = ticket.git.worktree_path
+
+        # Create worktree if needed
+        try:
+            if worktree_path is None or not worktree_exists(worktree_path):
+                worktree_path = create_worktree(
+                    repo_path=self.config.repo_path,
+                    worktree_dir=self.config.worktree_dir,
+                    branch_name=branch_name,
+                    base_branch=self.config.base_branch,
+                )
+                ticket.git = GitContext(
+                    worktree_path=worktree_path,
+                    branch_name=branch_name,
+                )
+                self.manager.save()
+        except GitOperationError as exc:
+            self.call_from_thread(
+                self.notify, f"Git error: {exc}", severity="error"
+            )
+            return
+
+        assert worktree_path is not None
+
+        # Launch terminal
+        terminal_name = self.config.terminal
+        try:
+            launch_terminal(
+                cwd=worktree_path,
+                command=self.config.claude_launch_command,
+                ticket_id=ticket_id,
+                terminal_override=terminal_name,
+            )
+        except ExternalToolError as exc:
+            self.call_from_thread(
+                self.notify, f"Terminal error: {exc}", severity="error"
+            )
+            return
+
+        display_terminal = terminal_name or "terminal"
+        self.call_from_thread(
+            self._post_open_refresh, ticket_id, display_terminal
+        )
+
+    def _post_open_refresh(self, ticket_id: int, terminal: str) -> None:
+        """Refresh board and notify after opening a ticket."""
+        screen = self.screen
+        if isinstance(screen, BoardScreen):
+            screen.refresh_board()
+        self.notify(f"Opened ticket #{ticket_id} in {terminal}")
 
     # ------------------------------------------------------------------
     # Lifecycle
