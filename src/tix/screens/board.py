@@ -117,7 +117,7 @@ class BoardScreen(Screen):
 
     def _visible_cards(self, col: KanbanColumn) -> list[TicketCardWidget]:
         """Return only visible (not filtered out) cards in a column."""
-        return [c for c in col.card_widgets() if c.display]
+        return [c for c in col.ticket_widgets() if c.display]
 
     def _focus_card_at(self, col_idx: int, card_idx: int) -> None:
         """Focus a specific card by column and card index."""

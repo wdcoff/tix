@@ -1,7 +1,7 @@
 ---
 title: "fix: Shift+H/L keybindings and Warp terminal launcher"
 type: fix
-status: active
+status: completed
 date: 2026-03-16
 ---
 

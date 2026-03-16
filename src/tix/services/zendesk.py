@@ -29,14 +29,34 @@ class ZendeskService:
     # -- tickets ---------------------------------------------------------------
 
     def fetch_open_tickets(self) -> list[dict]:
-        """Fetch all open tickets via Zendesk Search API. Returns raw ticket dicts."""
+        """Fetch all open tickets via Zendesk Search API. Returns raw ticket dicts.
+
+        Includes sideloaded users so that requester names can be resolved.
+        Each ticket dict gets a ``requester_name`` key injected from the
+        sideloaded users array.
+        """
         try:
             resp = self.client.get(
                 "/search.json",
-                params={"query": "type:ticket status:open", "per_page": 100},
+                params={
+                    "query": "type:ticket status:open",
+                    "per_page": 100,
+                    "include": "users",
+                },
             )
             resp.raise_for_status()
-            results = resp.json()["results"]
+            data = resp.json()
+            results = data["results"]
+
+            # Build user lookup from sideloaded users
+            users = {u["id"]: u.get("name", "") for u in data.get("users", [])}
+
+            # Inject requester_name into each ticket
+            for ticket in results:
+                requester_id = ticket.get("requester_id")
+                if requester_id and requester_id in users:
+                    ticket["requester_name"] = users[requester_id]
+
             logger.info("Fetched %d open tickets from Zendesk", len(results))
             return results
         except httpx.HTTPStatusError as e:

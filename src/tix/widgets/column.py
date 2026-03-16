@@ -18,6 +18,7 @@ class KanbanColumn(VerticalScroll):
     def __init__(self, column_name: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self._column_name = column_name
+        self._card_count = 0
         self.border_title = f"{column_name} (0)"
 
     @property
@@ -28,6 +29,7 @@ class KanbanColumn(VerticalScroll):
         """Mount a new card widget for the given ticket."""
         card = TicketCardWidget(ticket)
         self.mount(card)
+        self._card_count += 1
         return card
 
     def remove_ticket(self, ticket_id: int) -> None:
@@ -35,18 +37,19 @@ class KanbanColumn(VerticalScroll):
         for child in self.query(TicketCardWidget):
             if child.ticket.ticket_id == ticket_id:
                 child.remove()
+                self._card_count = max(0, self._card_count - 1)
                 break
         self._update_title()
 
     def clear_tickets(self) -> None:
         """Remove all ticket cards from this column."""
         self.query(TicketCardWidget).remove()
+        self._card_count = 0
         self._update_title()
 
-    def card_widgets(self) -> list[TicketCardWidget]:
+    def ticket_widgets(self) -> list[TicketCardWidget]:
         """Return all card widgets in this column, in DOM order."""
         return list(self.query(TicketCardWidget))
 
     def _update_title(self) -> None:
-        count = len(self.query(TicketCardWidget))
-        self.border_title = f"{self._column_name} ({count})"
+        self.border_title = f"{self._column_name} ({self._card_count})"
