@@ -10,7 +10,6 @@ import logging
 import os
 import subprocess
 import textwrap
-import threading
 from pathlib import Path
 
 from tix.errors import ExternalToolError
@@ -23,16 +22,6 @@ def _escape_applescript(s: str) -> str:
     """Escape a string for safe embedding in AppleScript double-quoted strings."""
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
-
-def _escape_yaml_value(s: str) -> str:
-    """Escape a string for safe embedding in YAML values.
-
-    If the value contains any special characters, wrap it in single quotes
-    and escape embedded single quotes by doubling them.
-    """
-    if any(c in s for c in '"\'\\:#{}[]|>&*!%@`'):
-        return "'" + s.replace("'", "''") + "'"
-    return s
 
 
 _TERM_PROGRAM_MAP: dict[str, str] = {
@@ -92,51 +81,39 @@ def launch_terminal(
 # ------------------------------------------------------------------
 
 
-def _cleanup_file(path: Path) -> None:
-    """Remove a temporary file, ignoring errors."""
-    try:
-        path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-
 def _launch_warp(cwd: Path, command: str, ticket_id: int) -> None:
-    """Launch via Warp launch configuration + URI scheme."""
-    config_dir = Path.home() / ".warp" / "launch_configurations"
-    config_dir.mkdir(parents=True, exist_ok=True)
+    """Launch a new tab in the current Warp window.
 
-    config_name = f"tix-{ticket_id}"
-    config_path = config_dir / f"{config_name}.yaml"
-
-    # Warp launch configs require absolute paths (no ~)
+    Uses warp://action/new_tab URI to open a tab at the correct CWD,
+    then sends the command via System Events keystroke.
+    """
     abs_cwd = str(cwd.resolve())
-    safe_cwd = _escape_yaml_value(abs_cwd)
-    safe_command = _escape_yaml_value(command)
-    yaml_content = textwrap.dedent(f"""\
-        ---
-        name: "{config_name}"
-        windows:
-          - tabs:
-              - title: "tix #{ticket_id}"
-                layout:
-                  cwd: {safe_cwd}
-                  command: {safe_command}
-    """)
-    config_path.write_text(yaml_content)
+    safe_command = _escape_applescript(command)
 
+    # Step 1: Open a new tab at the correct directory via URI scheme
     result = subprocess.run(
-        ["open", f"warp://launch/{config_name}"],
+        ["open", f"warp://action/new_tab?path={abs_cwd}"],
         capture_output=True,
         text=True,
         env=clean_env(),
     )
     if result.returncode != 0:
         raise ExternalToolError(
-            f"Failed to launch Warp: {result.stderr.strip()}"
+            f"Failed to open Warp tab: {result.stderr.strip()}"
         )
 
-    # Schedule cleanup of the temp YAML config file
-    threading.Timer(5.0, _cleanup_file, args=[config_path]).start()
+    # Step 2: Type and execute the command in the new tab via keystroke
+    script = textwrap.dedent(f"""\
+        delay 1.5
+        tell application "System Events" to tell process "Warp"
+            keystroke "{safe_command}"
+            key code 36
+        end tell
+    """)
+    subprocess.Popen(
+        ["osascript", "-e", script],
+        env=clean_env(),
+    )
 
 
 def _launch_iterm(cwd: Path, command: str, ticket_id: int) -> None:

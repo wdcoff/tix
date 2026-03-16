@@ -145,8 +145,8 @@ class TicketCardWidget(Static):
     def key_enter(self) -> None:
         self.post_message(self.CardSelected(self.ticket.ticket_id))
 
-    def key_H(self) -> None:
+    def key_upper_h(self) -> None:
         self.post_message(self.CardMoveLeft(self.ticket.ticket_id))
 
-    def key_L(self) -> None:
+    def key_upper_l(self) -> None:
         self.post_message(self.CardMoveRight(self.ticket.ticket_id))
