@@ -64,7 +64,10 @@ class TicketCardWidget(Static):
         subject = t.subject[:30] if t.subject else ""
         line1 = f"{tid}  {subject}"
 
-        # Line 2: priority | requester | age
+        # Line 2: Zendesk status
+        line2 = f"Zendesk: {t.zendesk_status}"
+
+        # Line 3: priority | requester | age
         priority_str = (t.priority.value if t.priority else "normal").capitalize()
         requester = t.requester_name or "Unknown"
         if len(requester) > 12:
@@ -80,31 +83,18 @@ class TicketCardWidget(Static):
             Priority.LOW: "dim white",
         }.get(t.priority, "white")
 
-        # Zendesk status with color hint
-        zd_status = t.zendesk_status or "open"
-        zd_colors = {
-            "open": "green",
-            "pending": "yellow",
-            "hold": "yellow",
-            "solved": "magenta",
-            "closed": "dim white",
-            "new": "cyan",
-        }
-        zd_color = zd_colors.get(zd_status, "white")
-
-        line2 = (
+        line3 = (
             f"[{priority_color}]{priority_str}[/] | "
-            f"[{zd_color}]{zd_status}[/] | "
             f"{requester} | "
             f"{age_str}"
         )
 
-        # Line 3: conditional badges
-        line3 = self._render_badges()
+        # Line 4: conditional badges
+        line4 = self._render_badges()
 
-        lines = [line1, line2]
-        if line3:
-            lines.append(line3)
+        lines = [line1, line2, line3]
+        if line4:
+            lines.append(line4)
 
         return "\n".join(lines)
 

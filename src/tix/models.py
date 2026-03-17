@@ -155,18 +155,22 @@ class BoardState:
     tickets: list[TicketData] = field(default_factory=list)
     archived: list[TicketData] = field(default_factory=list)
     last_sync: datetime | None = None
+    custom_status_map: dict[int, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "tickets": [t.to_dict() for t in self.tickets],
             "archived": [t.to_dict() for t in self.archived],
             "last_sync": _datetime_to_str(self.last_sync),
+            "custom_status_map": {str(k): v for k, v in self.custom_status_map.items()},
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> BoardState:
+        raw_map = data.get("custom_status_map", {})
         return cls(
             tickets=[TicketData.from_dict(t) for t in data.get("tickets", [])],
             archived=[TicketData.from_dict(t) for t in data.get("archived", [])],
             last_sync=_str_to_datetime(data.get("last_sync")),
+            custom_status_map={int(k): v for k, v in raw_map.items()},
         )

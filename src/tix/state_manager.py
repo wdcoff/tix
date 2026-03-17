@@ -60,10 +60,17 @@ class StateManager:
         if custom_status_map is not None:
             self.state.custom_status_map = custom_status_map
 
+        status_map = self.state.custom_status_map
+
         for raw in tickets:
             tid = raw["id"]
             subject = raw.get("subject", "")
-            status = raw.get("status", "open")
+            # Resolve custom status label, fall back to stock status
+            custom_status_id = raw.get("custom_status_id")
+            if custom_status_id and custom_status_id in status_map:
+                status = status_map[custom_status_id]
+            else:
+                status = raw.get("status", "open")
             priority_raw = raw.get("priority")
             requester = raw.get("requester_name")
             created = raw.get("created_at")
