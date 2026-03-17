@@ -35,6 +35,7 @@ class Config:
     zendesk_token: str
     repo_path: Path
     worktree_dir: Path
+    zendesk_group: str | None = None
     base_branch: str = "main"
     sync_interval_seconds: int = 300
     terminal: str | None = None
@@ -82,6 +83,8 @@ def load_config(path: Path | None = None) -> Config:
     if not email:
         raise ConfigError("zendesk.email is required in config file")
 
+    group = zendesk.get("group") or None
+
     token = os.environ.get("ZENDESK_API_TOKEN", "")
     if not token:
         raise ConfigError(
@@ -128,6 +131,7 @@ def load_config(path: Path | None = None) -> Config:
         zendesk_subdomain=subdomain,
         zendesk_email=email,
         zendesk_token=token,
+        zendesk_group=group,
         repo_path=repo_path,
         worktree_dir=worktree_dir,
         base_branch=base_branch,

@@ -71,6 +71,7 @@ class TixApp(App):
                     subdomain=config.zendesk_subdomain,
                     email=config.zendesk_email,
                     token=config.zendesk_token,
+                    group=config.zendesk_group,
                 )
                 self._deploy_tracker = DeployTracker()
             except Exception as e:

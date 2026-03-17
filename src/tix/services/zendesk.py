@@ -15,10 +15,11 @@ class ZendeskService:
     Use as a context manager or call :meth:`close` explicitly.
     """
 
-    def __init__(self, subdomain: str, email: str, token: str):
+    def __init__(self, subdomain: str, email: str, token: str, group: str | None = None):
         if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$", subdomain):
             raise ValueError(f"Invalid Zendesk subdomain: {subdomain}")
 
+        self._group = group
         self.client = httpx.Client(
             base_url=f"https://{subdomain}.zendesk.com/api/v2",
             auth=(f"{email}/token", token),
@@ -36,10 +37,14 @@ class ZendeskService:
         sideloaded users array.
         """
         try:
+            query = "type:ticket status:open"
+            if self._group:
+                query += f" group:{self._group}"
+
             resp = self.client.get(
                 "/search.json",
                 params={
-                    "query": "type:ticket status:open",
+                    "query": query,
                     "per_page": 100,
                     "include": "users",
                 },
