@@ -80,8 +80,21 @@ class TicketCardWidget(Static):
             Priority.LOW: "dim white",
         }.get(t.priority, "white")
 
+        # Zendesk status with color hint
+        zd_status = t.zendesk_status or "open"
+        zd_colors = {
+            "open": "green",
+            "pending": "yellow",
+            "hold": "yellow",
+            "solved": "magenta",
+            "closed": "dim white",
+            "new": "cyan",
+        }
+        zd_color = zd_colors.get(zd_status, "white")
+
         line2 = (
             f"[{priority_color}]{priority_str}[/] | "
+            f"[{zd_color}]{zd_status}[/] | "
             f"{requester} | "
             f"{age_str}"
         )
