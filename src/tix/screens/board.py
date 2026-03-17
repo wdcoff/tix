@@ -248,7 +248,12 @@ class BoardScreen(Screen):
             return
 
         self.refresh_board()
-        self._focus_card_at(new_idx, 0)
+        cards = self._visible_cards(self.columns[new_idx])
+        card_idx = next(
+            (i for i, c in enumerate(cards) if c.ticket.ticket_id == ticket_id),
+            0,
+        )
+        self._focus_card_at(new_idx, card_idx)
 
     # ------------------------------------------------------------------
     # Board refresh
