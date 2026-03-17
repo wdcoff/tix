@@ -114,6 +114,10 @@ class TicketCardWidget(Static):
         t = self.ticket
         parts: list[str] = []
 
+        # Notes badge
+        if t.notes:
+            parts.append("[dim]\U0001f4dd[/]")
+
         # Stale badge
         if self.has_class("stale"):
             parts.append("[bold yellow]\u26a0 Stale[/]")

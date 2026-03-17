@@ -176,6 +176,14 @@ class StateManager:
     # PR / deploy / staleness
     # ------------------------------------------------------------------
 
+    def update_notes(self, ticket_id: int, notes: str | None) -> None:
+        """Set or clear notes on a ticket. Empty string is treated as None."""
+        for ticket in self.state.tickets:
+            if ticket.ticket_id == ticket_id:
+                ticket.notes = notes if notes and notes.strip() else None
+                return
+        raise KeyError(f"Ticket {ticket_id} not found in active tickets")
+
     def update_pr(self, ticket_id: int, pr_context: PRContext) -> None:
         """Set the PR context on a ticket."""
         for ticket in self.state.tickets:

@@ -85,6 +85,14 @@ class TicketDetailScreen(ModalScreen[None]):
                         classes="detail-field",
                     )
 
+                # Notes
+                if t.notes:
+                    yield Static("[b]Notes:[/]", classes="detail-field")
+                    yield Static(
+                        t.notes,
+                        classes="detail-field detail-notes",
+                    )
+
                 # Staleness
                 if t.stale_since:
                     hours = (datetime.now(timezone.utc) - t.stale_since).total_seconds() / 3600

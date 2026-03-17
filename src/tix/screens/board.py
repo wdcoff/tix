@@ -6,6 +6,7 @@ from textual.containers import HorizontalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Input
 
+from tix.screens.note_editor import NoteEditorScreen
 from tix.screens.ticket_detail import TicketDetailScreen
 from tix.widgets.card import TicketCardWidget
 from tix.widgets.column import KanbanColumn
@@ -25,6 +26,7 @@ class BoardScreen(Screen):
         Binding("enter", "select_card", "Open card", show=True),
         Binding("r", "sync", "Sync", show=True),
         Binding("d", "detail", "Detail", show=True),
+        Binding("n", "edit_note", "Note", show=True),
         Binding("slash", "search", "Search", show=True),
         Binding("q", "quit", "Quit", show=True),
     ]
@@ -177,6 +179,27 @@ class BoardScreen(Screen):
         focused = self.app.focused
         if isinstance(focused, TicketCardWidget):
             self.app.push_screen(TicketDetailScreen(focused.ticket))
+
+    def action_edit_note(self) -> None:
+        """Open the note editor modal for the focused card."""
+        focused = self.app.focused
+        if isinstance(focused, TicketCardWidget):
+            ticket = focused.ticket
+
+            def _on_note_result(result: str | None) -> None:
+                if result is None:
+                    return
+                manager = self.app.manager  # type: ignore[attr-defined]
+                if manager is None:
+                    return
+                manager.update_notes(ticket.ticket_id, result)
+                manager.save()
+                self.refresh_board()
+
+            self.app.push_screen(
+                NoteEditorScreen(ticket.ticket_id, ticket.notes),
+                callback=_on_note_result,
+            )
 
     def action_quit(self) -> None:
         self.app.exit()

@@ -104,6 +104,7 @@ class TicketData:
     requester_name: str | None = None
     git: GitContext = field(default_factory=GitContext)
     pr: PRContext = field(default_factory=PRContext)
+    notes: str | None = None
     deployed_in_tag: str | None = None
     stale_since: datetime | None = None
     created_at: datetime | None = None
@@ -118,6 +119,7 @@ class TicketData:
             "local_column": self.local_column,
             "priority": self.priority.value if self.priority is not None else None,
             "requester_name": self.requester_name,
+            "notes": self.notes,
             "git": self.git.to_dict(),
             "pr": self.pr.to_dict(),
             "deployed_in_tag": self.deployed_in_tag,
@@ -137,6 +139,7 @@ class TicketData:
             local_column=data["local_column"],
             priority=Priority(raw_priority) if raw_priority is not None else None,
             requester_name=data.get("requester_name"),
+            notes=data.get("notes"),
             git=GitContext.from_dict(data.get("git", {})),
             pr=PRContext.from_dict(data.get("pr", {})),
             deployed_in_tag=data.get("deployed_in_tag"),

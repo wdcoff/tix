@@ -111,3 +111,48 @@ TicketDetailScreen {
     width: 100%;
     margin-top: 1;
 }
+
+.detail-notes {
+    padding: 0 0 0 2;
+    color: $text-muted;
+}
+
+/* Note Editor Modal */
+NoteEditorScreen {
+    align: center middle;
+}
+
+#note-modal {
+    width: 80;
+    max-width: 80;
+    height: auto;
+    max-height: 30;
+    background: $surface;
+    border: thick $accent;
+    padding: 1 2;
+}
+
+#note-title {
+    width: 100%;
+    text-align: center;
+    text-style: bold;
+    padding: 0 0 1 0;
+    color: $text;
+    border-bottom: solid $primary;
+    margin-bottom: 1;
+}
+
+#note-textarea {
+    height: 12;
+    margin: 0 0 1 0;
+}
+
+#note-buttons {
+    height: auto;
+    align: center middle;
+    width: 100%;
+}
+
+#note-buttons Button {
+    margin: 0 1;
+}
